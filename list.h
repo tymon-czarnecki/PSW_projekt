@@ -8,9 +8,12 @@ struct TList {
     struct TNode *tail;
     int size;
     int maxSize;
+    int isDestroyed;
+    int workersNum;
     pthread_mutex_t lock;
     pthread_cond_t canAdd;
     pthread_cond_t canRemove;
+    pthread_cond_t canDestroy;
 };
 
 struct TNode {
