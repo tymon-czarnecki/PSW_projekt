@@ -8,7 +8,7 @@ struct TList {
     struct TNode *tail;
     int size;
     int maxSize;
-    int isDestroyed;
+    int isDestroyed;  //0 - nie jest, 1 - jest usuwana
     int workersNum;
     pthread_mutex_t lock;
     pthread_cond_t canAdd;
