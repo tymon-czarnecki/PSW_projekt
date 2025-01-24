@@ -3,6 +3,7 @@
 
 #include <pthread.h>
 
+typedef struct TList TList;
 struct TList {
     struct TNode *head;
     struct TNode *tail;
