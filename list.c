@@ -305,6 +305,7 @@ void appendItems(TList *lst, TList *lst2) {
         lst->size += lst2->size;
 
         pthread_cond_broadcast(&lst->canRemove);
+        pthread_cond_broadcast(&lst2->canAdd);
     }
 
     lst2->head = lst2->tail = NULL;
