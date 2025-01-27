@@ -111,7 +111,6 @@ void putItem(TList *lst, void *itm) {
 
     lst->size++;
     pthread_cond_signal(&lst->canRemove);
-
     pthread_mutex_unlock(&lst->lock);
 
     decrementWorkers(lst);
@@ -142,7 +141,7 @@ void *getItem(TList *lst) {
     free(temp);
     lst->size--;
     
-    if (lst->size < lst->maxSize) pthread_cond_broadcast(&lst->canAdd);
+    if (lst->size < lst->maxSize) pthread_cond_signal(&lst->canAdd);
     pthread_mutex_unlock(&lst->lock);
     
     decrementWorkers(lst);
@@ -254,6 +253,8 @@ int getCount(TList *lst) {
 
 void setMaxSize(TList *lst, int s) {
     incrementWorkers(lst);
+    int oldSize;
+
     pthread_mutex_lock(&lst->lock);
     
     if(lst->isDestroyed == 1){
@@ -263,8 +264,13 @@ void setMaxSize(TList *lst, int s) {
         return;
     }    
     
+    oldSize = lst->maxSize;
     lst->maxSize = s;
-    pthread_cond_broadcast(&lst->canAdd);
+
+    if ((lst->maxSize > oldSize) && (lst->size == oldSize)){
+        pthread_cond_broadcast(&lst->canAdd);
+    }
+    
     decrementWorkers(lst);
     pthread_mutex_unlock(&lst->lock);
 }
@@ -295,9 +301,10 @@ void appendItems(TList *lst, TList *lst2) {
         } else {
             lst->head = lst2->head;
         }
-
         lst->tail = lst2->tail;
         lst->size += lst2->size;
+
+        pthread_cond_broadcast(&lst->canRemove);
     }
 
     lst2->head = lst2->tail = NULL;
