@@ -24,7 +24,7 @@ Projekt jest dostępny w repozytorium pod adresem:
 	```
 Zmienna `data` wskazuje na przechowywane dane, a `next` na następną strukturę budując łańcuch, który tworzy listę.
 
-3. Struktura listy prezentuje się następująco:
+2. Struktura listy prezentuje się następująco:
     ```C
 	struct TList {
 	    struct TNode *head;
