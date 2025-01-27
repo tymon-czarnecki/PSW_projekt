@@ -12,6 +12,7 @@ struct TList {
     int isDestroyed;  //0 - nie jest, 1 - jest usuwana
     int workersNum;
     pthread_mutex_t lock;
+    pthread_mutex_t workersLock;
     pthread_cond_t canAdd;
     pthread_cond_t canRemove;
     pthread_cond_t canDestroy;
@@ -22,6 +23,8 @@ struct TNode {
     struct TNode *next;
 };
 
+void incrementWorkers(TList *lst);
+void decrementWorkers(TList *lst);
 TList *createList(int s);
 void destroyList(TList *lst);
 void putItem(TList *lst, void *itm);

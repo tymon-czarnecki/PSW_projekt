@@ -3,6 +3,18 @@
 #include <pthread.h>
 #include "list.h"
 
+void incrementWorkers(TList *lst) {
+    pthread_mutex_lock(&lst->workersLock);
+    lst->workersNum++;
+    pthread_mutex_unlock(&lst->workersLock);
+}
+
+void decrementWorkers(TList *lst) {
+    pthread_mutex_lock(&lst->workersLock);
+    lst->workersNum--;
+    pthread_mutex_unlock(&lst->workersLock);
+}
+
 
 TList *createList(int s) {
     TList *list = (TList *)malloc(sizeof(TList));
@@ -14,32 +26,38 @@ TList *createList(int s) {
     list->workersNum = 0;
 
     pthread_mutex_init(&list->lock, NULL);
+    pthread_mutex_init(&list->workersLock, NULL);
     pthread_cond_init(&list->canAdd, NULL);
     pthread_cond_init(&list->canRemove, NULL);
-    pthread_cond_init (&list->canDestroy, NULL);
+    pthread_cond_init(&list->canDestroy, NULL);
     return list;
 }
 
 void destroyList(TList *lst) {
-    lst->workersNum++;
-    
+    incrementWorkers(lst);
+
     pthread_mutex_lock(&lst->lock);
-    if(lst->isDestroyed == 0){
-    lst->isDestroyed = 1;
-    
-    lst->size = 1;
-    lst->maxSize = 2;
-    pthread_cond_broadcast(&lst->canAdd);
-    pthread_cond_broadcast(&lst->canRemove);
-    
+    if (lst->isDestroyed == 0) {
+        lst->isDestroyed = 1;
+        lst->size = 1;
+        lst->maxSize = 2;
+        pthread_cond_broadcast(&lst->canAdd);
+        pthread_cond_broadcast(&lst->canRemove);
     } else {
-        lst->workersNum--;
+        decrementWorkers(lst);
+
         pthread_mutex_unlock(&lst->lock);
         pthread_cond_signal(&lst->canDestroy);
         return;
     }
 
-    while(lst->workersNum > 1){
+    while (1) {
+        pthread_mutex_lock(&lst->workersLock);
+        if (lst->workersNum <= 1) {
+            pthread_mutex_unlock(&lst->workersLock);
+            break;
+        }
+        pthread_mutex_unlock(&lst->workersLock);
         pthread_cond_wait(&lst->canDestroy, &lst->lock);
     }
 
@@ -49,12 +67,12 @@ void destroyList(TList *lst) {
         current = current->next;
 
         free(temp->data);
-        free(temp); 
+        free(temp);
     }
-
 
     pthread_mutex_unlock(&lst->lock);
     pthread_mutex_destroy(&lst->lock);
+    pthread_mutex_destroy(&lst->workersLock);
     pthread_cond_destroy(&lst->canAdd);
     pthread_cond_destroy(&lst->canRemove);
     pthread_cond_destroy(&lst->canDestroy);
@@ -64,19 +82,21 @@ void destroyList(TList *lst) {
 
 
 void putItem(TList *lst, void *itm) {
-    lst->workersNum ++;
+    incrementWorkers(lst);
+
     pthread_mutex_lock(&lst->lock);
 
     while (lst->size >= lst->maxSize) {
         pthread_cond_wait(&lst->canAdd, &lst->lock);
     }
-    
-    if(lst->isDestroyed == 1){
-        lst->workersNum--;
+
+    if (lst->isDestroyed == 1) {
+        decrementWorkers(lst);
+
         pthread_mutex_unlock(&lst->lock);
         pthread_cond_signal(&lst->canDestroy);
         return;
-        }
+    }
 
     struct TNode *newNode = (struct TNode *)malloc(sizeof(struct TNode));
     newNode->data = itm;
@@ -90,19 +110,21 @@ void putItem(TList *lst, void *itm) {
     }
 
     lst->size++;
-    pthread_cond_broadcast(&lst->canRemove);
-    lst->workersNum--;
+    pthread_cond_signal(&lst->canRemove);
+
     pthread_mutex_unlock(&lst->lock);
+
+    decrementWorkers(lst);
 }
 
 void *getItem(TList *lst) {
-    lst->workersNum ++;
+    incrementWorkers(lst);
     pthread_mutex_lock(&lst->lock);
 
     while (lst->size == 0) {
         pthread_cond_wait(&lst->canRemove, &lst->lock);
         if(lst->isDestroyed == 1){
-            lst->workersNum--;
+            decrementWorkers(lst);
             pthread_mutex_unlock(&lst->lock);
             pthread_cond_signal(&lst->canDestroy);
             return NULL;
@@ -123,12 +145,12 @@ void *getItem(TList *lst) {
     if (lst->size < lst->maxSize) pthread_cond_broadcast(&lst->canAdd);
     pthread_mutex_unlock(&lst->lock);
     
-    lst->workersNum--;
+    decrementWorkers(lst);
     return data;
 }
 
 void *popItem(TList *lst) {
-    lst->workersNum ++;
+    incrementWorkers(lst);
     pthread_mutex_lock(&lst->lock);
 
     while (lst->size == 0) {
@@ -136,7 +158,7 @@ void *popItem(TList *lst) {
     }
     
     if(lst->isDestroyed == 1){
-        lst->workersNum--;
+        decrementWorkers(lst);
         pthread_mutex_unlock(&lst->lock);
         pthread_cond_signal(&lst->canDestroy);
         return NULL;
@@ -165,16 +187,16 @@ void *popItem(TList *lst) {
     pthread_cond_signal(&lst->canAdd);
     pthread_mutex_unlock(&lst->lock);
     
-    lst->workersNum--;
+    decrementWorkers(lst);
     return data;
 }
 
 int removeItem(TList *lst, void *itm) {
-    lst->workersNum ++;
+    incrementWorkers(lst);
     pthread_mutex_lock(&lst->lock);
 
     if(lst->isDestroyed == 1){
-        lst->workersNum--;
+        decrementWorkers(lst);
         pthread_mutex_unlock(&lst->lock);
         pthread_cond_signal(&lst->canDestroy);
         return 0;
@@ -209,16 +231,16 @@ int removeItem(TList *lst, void *itm) {
     }
 
     pthread_mutex_unlock(&lst->lock);
-    lst->workersNum--;
+    decrementWorkers(lst);
     return 0;
 }
 
 int getCount(TList *lst) {
-    lst->workersNum ++;
+    incrementWorkers(lst);
     pthread_mutex_lock(&lst->lock);
     
     if(lst->isDestroyed == 1){
-        lst->workersNum--;
+        decrementWorkers(lst);
         pthread_mutex_unlock(&lst->lock);
         pthread_cond_signal(&lst->canDestroy);
         return -1;
@@ -226,16 +248,16 @@ int getCount(TList *lst) {
     
     int count = lst->size;
     pthread_mutex_unlock(&lst->lock);
-    lst->workersNum--;
+    decrementWorkers(lst);
     return count;
 }
 
 void setMaxSize(TList *lst, int s) {
-    lst->workersNum ++;
+    incrementWorkers(lst);
     pthread_mutex_lock(&lst->lock);
     
     if(lst->isDestroyed == 1){
-        lst->workersNum--;
+        decrementWorkers(lst);
         pthread_mutex_unlock(&lst->lock);
         pthread_cond_signal(&lst->canDestroy);
         return;
@@ -243,24 +265,24 @@ void setMaxSize(TList *lst, int s) {
     
     lst->maxSize = s;
     pthread_cond_broadcast(&lst->canAdd);
-    lst->workersNum--;
+    decrementWorkers(lst);
     pthread_mutex_unlock(&lst->lock);
 }
 
 void appendItems(TList *lst, TList *lst2) {
-    lst->workersNum ++;
-    lst2->workersNum ++;    
+    incrementWorkers(lst);
+    incrementWorkers(lst2);  
     pthread_mutex_lock(&lst->lock);
     pthread_mutex_lock(&lst2->lock);
 
     if((lst->isDestroyed == 1) || (lst2->isDestroyed == 1)){
         if(lst->isDestroyed == 1){
-            lst->workersNum--;
+            decrementWorkers(lst);
             pthread_mutex_unlock(&lst->lock);
             pthread_cond_signal(&lst->canDestroy);
         }
         if(lst2->isDestroyed == 1){
-            lst2->workersNum--;
+            decrementWorkers(lst2);
             pthread_mutex_unlock(&lst2->lock);
             pthread_cond_signal(&lst2->canDestroy);
         }
@@ -282,18 +304,18 @@ void appendItems(TList *lst, TList *lst2) {
     lst2->size = 0;
 
     pthread_cond_broadcast(&lst->canRemove);
-    lst->workersNum--;
-    lst2->workersNum--;
+    decrementWorkers(lst);
+    decrementWorkers(lst2);
     pthread_mutex_unlock(&lst2->lock);
     pthread_mutex_unlock(&lst->lock);
 }
 
 void showList(TList *lst) {
-    lst->workersNum ++;    
+    incrementWorkers(lst);
     pthread_mutex_lock(&lst->lock);
     
     if(lst->isDestroyed == 1){
-        lst->workersNum--;
+        decrementWorkers(lst);
         pthread_mutex_unlock(&lst->lock);
         pthread_cond_signal(&lst->canDestroy);
         return;
@@ -307,6 +329,6 @@ void showList(TList *lst) {
     }
     printf("NULL\n");
     
-    lst->workersNum--;
+    decrementWorkers(lst);
     pthread_mutex_unlock(&lst->lock);
 }
